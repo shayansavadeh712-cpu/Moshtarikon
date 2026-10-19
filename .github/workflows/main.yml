@@ -1,0 +1,51 @@
+name: Build APK from zip
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Unpack newest zip
+        run: |
+          ZIP=$(git log --diff-filter=AM --name-only --pretty=format: -- '*.zip' | grep -m1 '\.zip$')
+          echo "Using: $ZIP"
+          test -n "$ZIP"
+          mkdir proj
+          unzip -q "$ZIP" -d proj
+          ls -la proj
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Download Persian font (Vazirmatn)
+        working-directory: proj
+        run: |
+          mkdir -p app/src/main/assets/fonts
+          for w in Regular Bold; do
+            curl -fsSL -o app/src/main/assets/fonts/Vazirmatn-$w.ttf \
+              https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/ttf/Vazirmatn-$w.ttf \
+              || rm -f app/src/main/assets/fonts/Vazirmatn-$w.ttf
+          done
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Build signed release APK
+        working-directory: proj
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: APK
+          path: proj/app/build/outputs/apk/release/*.apk
